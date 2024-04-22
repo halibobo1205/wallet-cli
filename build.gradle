@@ -129,4 +129,5 @@ shadowJar {
     baseName = 'wallet-cli'
     classifier = null
     version = null
+    mergeServiceFiles() //  https://github.com/grpc/grpc-java/issues/10853
 }
