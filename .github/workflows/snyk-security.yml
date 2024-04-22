@@ -23,6 +23,8 @@ on:
     branches: ["develop" ]
   pull_request:
     branches: ["develop"]
+  schedule:
+    - cron: '5 9 * * 0'  
 
 permissions:
   contents: read
