@@ -48,7 +48,7 @@ buildscript {
         grpcVersion = '1.60.0'
         protobufVersion = '3.21.12'
         protobufGradlePluginVersion = '0.8.0'
-        springCloudConsulVersion = '2.1.0.RELEASE'
+        springCloudConsulVersion = '3.0.0'
     }
 
     dependencies {
