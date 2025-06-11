@@ -18,6 +18,16 @@
 
 package org.tron.common.utils;
 
+import static org.apache.commons.lang3.StringUtils.EMPTY;
+import static org.apache.commons.lang3.StringUtils.isEmpty;
+import static org.tron.common.utils.DomainValidator.isDomainOrIP;
+import static org.tron.ledger.console.ConsoleColor.ANSI_BLUE;
+import static org.tron.ledger.console.ConsoleColor.ANSI_BOLD;
+import static org.tron.ledger.console.ConsoleColor.ANSI_GREEN;
+import static org.tron.ledger.console.ConsoleColor.ANSI_RED;
+import static org.tron.ledger.console.ConsoleColor.ANSI_RESET;
+import static org.tron.ledger.console.ConsoleColor.ANSI_YELLOW;
+
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
@@ -25,11 +35,14 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 
+import java.io.ByteArrayOutputStream;
 import java.io.Console;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
@@ -38,11 +51,15 @@ import java.util.Date;
 import java.util.List;
 import java.util.Scanner;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.jetbrains.annotations.Nullable;
 import org.tron.api.GrpcAPI.*;
 import org.tron.common.crypto.Hash;
 import org.tron.common.crypto.Sha256Sm3Hash;
 import org.tron.keystore.StringUtils;
 import org.tron.protos.contract.BalanceContract;
+import org.tron.walletcli.Client;
 import org.tron.walletserver.WalletApi;
 import org.tron.protos.Protocol.Block;
 import org.tron.protos.Protocol.Transaction;
@@ -87,6 +104,11 @@ public class Utils {
   public static final String VISIBLE = "visible";
   public static final String TRANSACTION = "transaction";
   public static final String VALUE = "value";
+  public static final String EMPTY_STR = "EMPTY";
+  public static final String HOST_REGEX = "^([a-zA-Z0-9.-]+):(\\d{1,5})$";
+  public static final String LOCK_WARNING = "⚠️" + ANSI_YELLOW
+      + " Wallet is locked. Transaction not allowed. Please use " + greenBoldHighlight("unlock")
+      + ANSI_YELLOW + " to retry" + ANSI_RESET;
 
   private static SecureRandom random = new SecureRandom();
 
@@ -95,7 +117,7 @@ public class Utils {
   }
 
   public static byte[] getBytes(char[] chars) {
-    Charset cs = Charset.forName("UTF-8");
+    Charset cs = StandardCharsets.UTF_8;
     CharBuffer cb = CharBuffer.allocate(chars.length);
     cb.put(chars);
     cb.flip();
@@ -239,12 +261,13 @@ public class Utils {
     return JsonFormatUtil.formatJson(jsonObject.toJSONString());
   }
 
-  public static char[] inputPassword2Twice() throws IOException {
+  public static char[] inputPassword2Twice(boolean isNew) throws IOException {
     char[] password0;
+    String newStr = isNew ? "new" : EMPTY;
     while (true) {
-      System.out.println("Please input password.");
+      System.out.println("Please input " + newStr + "password.");
       password0 = Utils.inputPassword(true);
-      System.out.println("Please input password again.");
+      System.out.println("Please input " + newStr + "password again.");
       char[] password1 = Utils.inputPassword(true);
       boolean flag = Arrays.equals(password0, password1);
       StringUtils.clear(password1);
@@ -679,12 +702,12 @@ public class Utils {
   }
 
   public static JSONObject printTransactionInfoToJSON(TransactionInfo transactioninfo) {
-    return JSONObject.parseObject(JsonFormat.printToString(transactioninfo, true));
+    return JSON.parseObject(JsonFormat.printToString(transactioninfo, true));
   }
 
   public static boolean confirmEncrption() {
     System.out.println(
-        "Please confirm encryption module,if input y or Y means default Eckey, other means SM2.");
+        "Please confirm encryption module,if input " + greenBoldHighlight("y/Y") + " means default Eckey, other means SM2.");
     Scanner in = new Scanner(System.in);
     String input = in.nextLine().trim();
     String str = input.split("\\s+")[0];
@@ -709,5 +732,146 @@ public class Utils {
     } catch (Exception e) {
     }
     return bRet;
+  }
+
+  public static String yellowBoldHighlight(String str) {
+    return ANSI_BOLD + ANSI_YELLOW + str + ANSI_RESET;
+  }
+
+  public static String greenHighlight(String str) {
+    return ANSI_GREEN + str + ANSI_RESET;
+  }
+
+  public static String greenBoldHighlight(String str) {
+    return ANSI_BOLD + ANSI_GREEN + str + ANSI_RESET;
+  }
+
+  public static String greenBoldHighlight(int i) {
+    return ANSI_BOLD + ANSI_GREEN + i + ANSI_RESET;
+  }
+
+  public static String blueBoldHighlight(String str) {
+    return ANSI_BOLD + ANSI_BLUE + str + ANSI_RESET;
+  }
+
+  public static String redBoldHighlight(String str) {
+    return ANSI_BOLD + ANSI_RED + str + ANSI_RESET;
+  }
+
+  public static String successfulHighlight() {
+    return ANSI_BOLD + ANSI_GREEN + " successful" + ANSI_RESET;
+  }
+
+  public static String failedHighlight() {
+    return ANSI_BOLD + ANSI_RED + " failed" + ANSI_RESET;
+  }
+
+  public static long getLong(String str) {
+    if (isEmpty(str)) {
+      return 300;
+    }
+    try {
+      return Long.parseLong(str);
+    } catch (NumberFormatException e) {
+      throw new IllegalArgumentException("The parameter is invalid. Please enter an integer.");
+    }
+  }
+
+  public static void printBanner() {
+    try (InputStream inputStream = Client.class.getResourceAsStream("/banner.txt")) {
+      if (inputStream != null) {
+        String banner = new String(readAllBytes(inputStream), StandardCharsets.UTF_8);
+        System.out.println(blueBoldHighlight(banner));
+      } else {
+        System.out.println("No banner.txt found!");
+      }
+    } catch (IOException e) {
+      System.err.println("Failed to load banner: " + e.getMessage());
+    }
+  }
+
+  private static byte[] readAllBytes(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    byte[] data = new byte[4096];
+    int bytesRead;
+    while ((bytesRead = inputStream.read(data, 0, data.length)) != -1) {
+      buffer.write(data, 0, bytesRead);
+    }
+    return buffer.toByteArray();
+  }
+
+  public static boolean isValid(String address1, String address2) {
+    if ((address1 == null || address1.trim().isEmpty()) &&
+        (address2 == null || address2.trim().isEmpty())) {
+      System.out.println("Both addresses cannot be empty!");
+      return false;
+    }
+
+    Pattern pattern = Pattern.compile(HOST_REGEX);
+
+    Result result1 = getResult(address1, pattern);
+    if (result1 == null) {
+      return false;
+    }
+
+    Result result2 = getResult(address2, pattern);
+    if (result2 == null) {
+      return false;
+    }
+
+    if (result1.host != null && result2.host != null &&
+        result1.host.equalsIgnoreCase(result2.host) && result1.port == result2.port) {
+      System.out.println("The same host cannot use the same port: " + address1 + " & " + address2);
+      return false;
+    }
+
+    return true;
+  }
+
+  @Nullable
+  private static Result getResult(String address, Pattern pattern) {
+    String host = null;
+    int port = -1;
+    if (address != null && !address.trim().isEmpty()) {
+      Matcher matcher = pattern.matcher(address.trim());
+      if (!matcher.matches()) {
+        System.out.println("host:port format is invalid: " + address);
+        return null;
+      }
+      host = matcher.group(1);
+      if (!isDomainOrIP(host)) {
+        System.out.println("The domain name or IP format is invalid.");
+        return null;
+      }
+      port = Integer.parseInt(matcher.group(2));
+      if (port < 1 || port > 65535) {
+        System.out.println("The port number is invalid: " + port + " in " + address);
+        return null;
+      }
+    }
+    return new Result(host, port);
+  }
+
+  private static class Result {
+    public final String host;
+    public final int port;
+
+    public Result(String host, int port) {
+      this.host = host;
+      this.port = port;
+    }
+  }
+
+  public static boolean isValid(String address) {
+    Pattern pattern = Pattern.compile(HOST_REGEX);
+
+    Matcher matcher = pattern.matcher(address);
+
+    if (!matcher.matches()) {
+      return false;
+    }
+
+    int port = Integer.parseInt(matcher.group(2));
+    return port >= 1 && port <= 65535;
   }
 }

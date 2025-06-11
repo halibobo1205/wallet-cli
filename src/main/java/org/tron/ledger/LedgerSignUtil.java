@@ -1,5 +1,11 @@
 package org.tron.ledger;
 
+import static org.tron.common.utils.Utils.failedHighlight;
+import static org.tron.ledger.console.ConsoleColor.ANSI_RED;
+import static org.tron.ledger.console.ConsoleColor.ANSI_RESET;
+
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.hid4java.HidDevice;
 import org.tron.ledger.listener.LedgerEventListener;
 import org.tron.ledger.listener.TransactionSignManager;
@@ -8,20 +14,13 @@ import org.tron.ledger.wrapper.DebugConfig;
 import org.tron.ledger.wrapper.HidServicesWrapper;
 import org.tron.ledger.wrapper.LedgerSignResult;
 import org.tron.ledger.wrapper.LedgerUserHelper;
-import org.tron.ledger.wrapper.TransOwnerChecker;
 import org.tron.protos.Protocol;
-
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.tron.ledger.console.ConsoleColor.ANSI_RED;
-import static org.tron.ledger.console.ConsoleColor.ANSI_RESET;
 
 public class LedgerSignUtil {
 
-  public static boolean requestLedgerSignLogic(Protocol.Transaction transaction, String path, byte[] address) {
+  public static boolean requestLedgerSignLogic(Protocol.Transaction transaction, String path, String address, boolean gasfree) {
     try {
-      if (!ContractTypeChecker.canUseLedgerSign(
+      if (!gasfree && !ContractTypeChecker.canUseLedgerSign(
           transaction.getRawData().getContract(0).getType().toString())) {
         return false;
       }
@@ -35,7 +34,7 @@ public class LedgerSignUtil {
           }
         } else {
           try {
-            hidDevice = HidServicesWrapper.getInstance().getHidDevice();
+            hidDevice = HidServicesWrapper.getInstance().getHidDevice(address, path);
           } catch (IllegalStateException e) {
             if (DebugConfig.isDebugEnabled()) {
               e.printStackTrace();
@@ -45,7 +44,7 @@ public class LedgerSignUtil {
           if (hidDevice == null) {
             LedgerUserHelper.showHidDeviceConnectionError();
             System.out.println("Please check your Ledger and try again");
-            System.out.println("Sign with Ledger failed");
+            System.out.println("Sign with Ledger " + failedHighlight() + "!");
             return false;
           }
           if (DebugConfig.isDebugEnabled()) {
@@ -71,8 +70,9 @@ public class LedgerSignUtil {
           if (hidDevice.isClosed()) {
             hidDevice.open();
           }
-          ret = LedgerEventListener.getInstance().executeSignListen(hidDevice, transaction, path);
+          ret = LedgerEventListener.getInstance().executeSignListen(hidDevice, transaction, path, gasfree);
         } catch (IllegalStateException e) {
+          System.out.println(ANSI_RED + e.getMessage() + ANSI_RESET);
           if (DebugConfig.isDebugEnabled()) {
             e.printStackTrace();
           }
@@ -87,7 +87,7 @@ public class LedgerSignUtil {
           if (hidDevice != null) {
             hidDevice.close();
           }
-          System.out.println("Sign with Ledger failed");
+          System.out.println("Sign with Ledger " + failedHighlight() + "!");
           System.out.println("Please check your Ledger and try again");
           return false;
         }
